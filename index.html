@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>錢錢記帳</title>
+<meta name="theme-color" content="#F3F1EA">
+<meta name="description" content="錢錢記帳：離線記錄支出、貨幣與付款方式，資料保存在手機。">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<style>
+  :root{
+    --bg: #F3F1EA;
+    --panel: #FFFFFF;
+    --ink: #1E1D1A;
+    --ink-soft: #6B6A64;
+    --line: #E1DED4;
+    --mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    --sans: -apple-system, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', sans-serif;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    font-family:var(--sans); color:var(--ink); background:var(--panel);
+    overscroll-behavior:none;
+  }
+  .app{ height:100dvh; display:flex; flex-direction:column; position:relative; }
+
+  .bar{
+    flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; border-bottom:1px solid var(--line);
+  }
+  .bar-title{ font-size:15px; font-weight:600; }
+  .save-status{ font-size:11px; color:var(--ink-soft); min-width:64px; text-align:right; }
+
+  .history{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:6px 14px; }
+  .row{
+    flex-shrink:0; display:flex; align-items:center; gap:4px;
+    padding:4px 4px 4px 10px; margin-bottom:6px;
+    border-radius:6px; background:var(--bg); border-left:3px solid var(--ink);
+  }
+  .row-lines{ flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.05; }
+  .row-line1{
+    font-family:var(--sans); font-size:12.5px; font-weight:500;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row-line2{
+    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row-actions{ flex-shrink:0; display:flex; gap:0; }
+  .row-icon-btn{
+    width:18px; height:18px; padding:0; border:none; background:none; cursor:pointer;
+    font-size:12px; display:flex; align-items:center; justify-content:center;
+  }
+  .row-icon-btn.edit{ color:var(--ink); }
+  .row-icon-btn.delete{ color:#A33; font-weight:700; }
+  .empty{ font-size:12.5px; color:var(--ink-soft); padding:8px 10px; }
+
+  .input-area{
+    flex:0 0 auto; border-top:1px solid var(--line); padding:10px 14px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom));
+    position:relative;
+  }
+  .merchant-input{
+    width:100%; height:36px; border:1px solid var(--line); border-radius:8px;
+    padding:0 10px; font-size:14px; font-family:var(--sans); background:var(--bg); color:var(--ink);
+    margin-bottom:6px;
+  }
+  .merchant-input:focus{ outline:2px solid var(--ink); outline-offset:1px; }
+
+  .amount-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px; }
+  .amount-left{ display:flex; align-items:baseline; gap:10px; min-width:0; }
+  .amount-label{ font-size:14px; color:var(--ink-soft); }
+  .amount-val{ font-size:32px; font-weight:600; }
+
+  .currency-area{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
+  .currency-grid{ display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:16px; gap:2px; }
+  .currency-chip{
+    width:30px; height:16px; padding:0; font-size:8.5px; line-height:16px; text-align:center;
+    border:1px solid var(--line); border-radius:2px; background:var(--panel); color:var(--ink-soft);
+    cursor:pointer; font-family:var(--sans);
+  }
+  .currency-chip.selected{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600; }
+  .currency-edit-btn{
+    width:18px; height:34px; border:1px solid var(--line); border-radius:4px; background:var(--panel);
+    color:var(--ink-soft); font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
+  }
+
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:6px; }
+  .key{
+    height:39px; border:1px solid var(--line); border-radius:7px; background:var(--panel);
+    font-size:35px; line-height:1; color:var(--ink); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .key:active{ background:var(--bg); }
+
+  /* payment chips (main input area) */
+  .pay-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .pay-header-label{ font-size:11px; color:var(--ink-soft); }
+  .manage-icon-btn{
+    width:26px; height:26px; border:1px solid var(--line); border-radius:6px;
+    background:var(--panel); color:var(--ink-soft); font-size:13px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;
+  }
+  .pay-rows-stack{ display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
+  .pay-grid-row{ display:flex; flex-wrap:nowrap; gap:2px; overflow-x:auto; }
+  .pay-chip{
+    flex-shrink:0; height:22.4px; padding:0 7px; font-size:12px; border:none; border-radius:3px;
+    cursor:pointer; opacity:0.55; font-family:var(--sans); white-space:nowrap;
+  }
+  .pay-chip.selected{ opacity:1; box-shadow:inset 0 0 0 2px rgba(0,0,0,0.2); }
+
+  .actions{ display:flex; gap:8px; align-items:center; }
+  .stamp-input{
+    width:98px; flex-shrink:0; height:34px; border:1px solid var(--line); border-radius:8px;
+    font-size:10.5px; font-family:var(--mono); text-align:center; padding:0 4px; color:var(--ink);
+    background:var(--bg);
+  }
+  .stamp-input:focus{ outline:2px solid var(--ink); outline-offset:1px; }
+  .save-btn{ flex:1; height:34px; font-size:13px; font-weight:600; border:none; border-radius:8px; background:var(--ink); color:#fff; cursor:pointer; }
+
+  /* payment-type manager — full-screen modal, own scroll */
+  .manage-modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:80;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .manage-modal-backdrop.open{ display:flex; }
+  .manage-card{
+    width:100%; max-width:360px; max-height:80dvh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    display:flex; flex-direction:column;
+    background:var(--panel); border-radius:12px; padding:12px;
+    box-shadow:0 12px 36px rgba(0,0,0,0.25);
+  }
+  .manage-title{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; line-height:1.5; }
+  .pm-rows{ background:var(--bg); border-radius:8px; padding:4px; }
+  .pm-grid-row{
+    display:flex; flex-wrap:nowrap; gap:3px; align-items:center; min-height:30px;
+    padding:3px; margin-bottom:4px; border-radius:6px;
+  }
+  .pm-grid-row.hover-target{ background:rgba(0,0,0,0.06); }
+  .pm-chip{
+    flex-shrink:0; height:26px; padding:0 9px; font-size:12px; border:none; border-radius:3px;
+    cursor:pointer; font-family:var(--sans); white-space:nowrap; touch-action:none;
+  }
+  .pm-chip.dim{ opacity:0.25; }
+  .pm-newrow-zone{
+    height:30px; border:1.5px dashed var(--line); border-radius:6px; display:flex;
+    align-items:center; justify-content:center; font-size:11px; color:var(--ink-soft); margin-bottom:4px;
+  }
+  .pm-newrow-zone.hover-target{ background:rgba(0,0,0,0.06); border-color:var(--ink-soft); }
+  .pm-add-row{ display:flex; justify-content:center; margin-top:6px; }
+  .pm-add-btn{ height:28px; padding:0 12px; font-size:12px; border:1px dashed var(--line); border-radius:8px; background:var(--panel); color:var(--ink-soft); cursor:pointer; }
+  .pm-ghost{
+    position:fixed; left:0; pointer-events:none; z-index:60;
+    border-radius:3px; padding:0 9px; height:26px; display:flex; align-items:center;
+    font-size:12px; box-shadow:0 6px 20px rgba(0,0,0,0.2); opacity:0.95;
+  }
+  .pm-done-row{ display:flex; justify-content:flex-end; margin-top:8px; }
+  .pm-done-btn{ height:30px; padding:0 16px; font-size:12.5px; border:none; border-radius:8px; background:var(--ink); color:#fff; cursor:pointer; }
+
+  /* currency edit modal */
+  .currency-modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:80;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .currency-modal-backdrop.open{ display:flex; }
+  .currency-card{
+    width:100%; max-width:300px; max-height:80dvh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:var(--panel); border-radius:12px; padding:14px;
+    box-shadow:0 12px 36px rgba(0,0,0,0.25);
+  }
+  .currency-card-title{ font-size:12.5px; color:var(--ink-soft); margin-bottom:8px; }
+  .currency-slot{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .currency-slot-idx{ font-size:11px; color:var(--ink-soft); width:14px; flex-shrink:0; }
+  .currency-slot input{
+    flex:1; min-width:0; height:32px; border:1px solid var(--line); border-radius:7px;
+    padding:0 8px; font-size:13px; font-family:var(--mono); text-transform:uppercase;
+  }
+  .currency-done-row{ display:flex; justify-content:flex-end; margin-top:8px; }
+  .currency-done-btn{ height:30px; padding:0 16px; font-size:12.5px; border:none; border-radius:8px; background:var(--ink); color:#fff; cursor:pointer; }
+
+  /* edit popover for a single chip — full-screen modal, own scroll */
+  .edit-modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:80;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .edit-modal-backdrop.open{ display:flex; }
+  .edit-card{
+    width:100%; max-width:340px; max-height:80dvh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:var(--panel); border-radius:12px; padding:14px;
+    box-shadow:0 12px 36px rgba(0,0,0,0.25);
+  }
+  .edit-card input{ width:100%; height:34px; border:1px solid var(--line); border-radius:8px; padding:0 10px; font-size:14px; margin-bottom:8px; font-family:var(--sans); }
+  .edit-swatch-btn{ width:100%; height:34px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; cursor:pointer; }
+  .honeycomb{ display:none; flex-wrap:wrap; gap:4px; max-height:150px; overflow-y:auto; padding:6px; background:var(--bg); border-radius:8px; margin-bottom:8px; }
+  .honeycomb.open{ display:flex; }
+  .hc-dot{ width:22px; height:22px; border-radius:50%; border:2px solid transparent; cursor:pointer; flex-shrink:0; }
+  .edit-card-actions{ display:flex; gap:8px; }
+  .edit-card-actions button{ flex:1; height:32px; font-size:12.5px; border-radius:8px; cursor:pointer; }
+  .edit-delete-btn{ border:1px solid #E8C4C4; background:var(--panel); color:#A33; }
+  .edit-done-btn{ border:none; background:var(--ink); color:#fff; }
+
+  .reset-row{ display:flex; justify-content:center; flex-wrap:wrap; margin-top:4px; }
+  .reset-link{ font-size:10.5px; color:var(--ink-soft); background:none; border:none; text-decoration:underline; cursor:pointer; padding:2px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="bar">
+    <span class="bar-title">記帳</span>
+    <span class="save-status" id="saveStatus"></span>
+  </div>
+
+  <div class="history" id="history"></div>
+
+  <div class="input-area">
+
+    <div class="currency-modal-backdrop" id="currencyModalBackdrop">
+      <div class="currency-card">
+        <div class="currency-card-title">編輯 8 個貨幣代碼（3 個英文字母）</div>
+        <div id="currencySlots"></div>
+        <div class="currency-done-row">
+          <button class="currency-done-btn" id="currencyDoneBtn" type="button">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="manage-modal-backdrop" id="manageModalBackdrop">
+      <div class="manage-card" id="managePanel">
+        <div class="manage-title">拖曳方塊調整順序／換行；點一下方塊可編輯名稱與顏色</div>
+        <div class="pm-rows" id="pmRows"></div>
+        <div class="pm-add-row">
+          <button class="pm-add-btn" id="pmAddBtn" type="button">+ 新增付款方式</button>
+        </div>
+        <div class="pm-done-row">
+          <button class="pm-done-btn" id="pmDoneBtn" type="button">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="edit-modal-backdrop" id="editModalBackdrop">
+      <div class="edit-card" id="editCard">
+        <input id="editLabelInput" type="text" placeholder="名稱">
+        <button class="edit-swatch-btn" id="editSwatchBtn" type="button"></button>
+        <div class="honeycomb" id="honeycomb"></div>
+        <div class="edit-card-actions">
+          <button class="edit-delete-btn" id="editDeleteBtn" type="button">刪除</button>
+          <button class="edit-done-btn" id="editDoneBtn" type="button">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="amount-row">
+      <div class="amount-left">
+        <span class="amount-label">金額</span>
+        <span class="amount-val" id="amountOut">0</span>
+      </div>
+      <div class="currency-area">
+        <div class="currency-grid" id="currencyGrid"></div>
+        <button class="currency-edit-btn" id="currencyEditBtn" type="button" aria-label="編輯貨幣">✎</button>
+      </div>
+    </div>
+
+    <div class="keypad" id="keypad"></div>
+
+    <div class="pay-header">
+      <span class="pay-header-label">付款方式</span>
+      <button class="manage-icon-btn" id="manageBtn" type="button" aria-label="管理付款方式">✎</button>
+    </div>
+    <div class="pay-rows-stack" id="payRowsStack"></div>
+
+    <input class="merchant-input" id="merchantInput" type="text" placeholder="店家 / 品項" autocomplete="off">
+
+    <div class="actions">
+      <input class="stamp-input" id="stampInput" type="text" placeholder="YY.MM.DD HH:MM">
+      <button class="save-btn" id="saveBtn" type="button">記一筆</button>
+    </div>
+
+    <div class="reset-row">
+      <button class="reset-link" id="exportBtn" type="button">匯出文字檔</button>
+      <span style="color:var(--line);font-size:10.5px;margin:0 6px">|</span>
+      <button class="reset-link" id="importBtn" type="button">匯入文字檔</button>
+      <span style="color:var(--line);font-size:10.5px;margin:0 6px">|</span>
+      <button class="reset-link" id="resetBtn" type="button">清空所有本機資料</button>
+      <input type="file" id="importFile" accept=".txt,text/plain" style="display:none">
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var STORAGE_KEY = "ledger_history_v1";
+  var PAYTYPES_KEY = "ledger_paytypes_v2";
+  var PAYLAYOUT_KEY = "ledger_paylayout_v1";
+  var CURRENCY_KEY = "ledger_currencies_v1";
+  var DEFAULT_CURRENCIES = ["TWD","JPY","USD","EUR","CHF","RMB","THB","NZD"];
+
+  /* legacy palette kept only as fallback seed colors for brand-new chips */
+  var seedPalette = [
+    {bg:"#9FD8B8", text:"#12442B"},
+    {bg:"#F0C878", text:"#4A3007"},
+    {bg:"#9CC3E8", text:"#0E3A5C"},
+    {bg:"#E8A98C", text:"#4A2410"},
+    {bg:"#E3A0B8", text:"#4A1E2C"},
+    {bg:"#B7ACDD", text:"#2C2350"}
+  ];
+
+  function genId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+  function loadJSON(key, fallback){
+    try{
+      var raw = localStorage.getItem(key);
+      if(!raw) return fallback;
+      return JSON.parse(raw);
+    }catch(e){ return fallback; }
+  }
+  function saveJSON(key, val){
+    try{
+      localStorage.setItem(key, JSON.stringify(val));
+      flashSaved();
+    }catch(e){
+      var el = document.getElementById("saveStatus");
+      if(el) el.textContent = "儲存失敗";
+    }
+  }
+  function flashSaved(){
+    var el = document.getElementById("saveStatus");
+    if(!el) return;
+    el.textContent = "已存到本機";
+    clearTimeout(flashSaved._t);
+    flashSaved._t = setTimeout(function(){ el.textContent = ""; }, 1200);
+  }
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function nowStamp(){
+    var d = new Date();
+    return pad(d.getFullYear()%100)+"."+pad(d.getMonth()+1)+"."+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+  }
+
+  function defaultPayTypes(){
+    return [
+      { id: genId(), label:"LinePay", bg:seedPalette[0].bg, text:seedPalette[0].text },
+      { id: genId(), label:"現金",     bg:seedPalette[1].bg, text:seedPalette[1].text },
+      { id: genId(), label:"信用卡",   bg:seedPalette[2].bg, text:seedPalette[2].text }
+    ];
+  }
+
+  var payTypes = loadJSON(PAYTYPES_KEY, null);
+  if(!payTypes || !payTypes.length) payTypes = defaultPayTypes();
+
+  var payLayout = loadJSON(PAYLAYOUT_KEY, null);
+
+  function findPay(id){ return payTypes.find(function(p){ return p.id === id; }); }
+
+  function ensureLayout(){
+    if(!Array.isArray(payLayout)) payLayout = [];
+    // drop ids that no longer exist
+    payLayout = payLayout.map(function(row){
+      return row.filter(function(id){ return !!findPay(id); });
+    }).filter(function(row){ return row.length > 0; });
+    // append any payType not present in any row
+    var placed = {};
+    payLayout.forEach(function(row){ row.forEach(function(id){ placed[id] = true; }); });
+    var missing = payTypes.filter(function(p){ return !placed[p.id]; }).map(function(p){ return p.id; });
+    if(missing.length){
+      if(payLayout.length === 0) payLayout.push([]);
+      payLayout[payLayout.length - 1] = payLayout[payLayout.length - 1].concat(missing);
+    }
+    if(payLayout.length === 0) payLayout.push([]);
+  }
+  ensureLayout();
+
+  var history = loadJSON(STORAGE_KEY, []);
+  var currencies = loadJSON(CURRENCY_KEY, null);
+  if(!Array.isArray(currencies) || currencies.length !== 8) currencies = DEFAULT_CURRENCIES.slice();
+  var selectedCurrency = currencies[0];
+  var amount = "";
+  var selectedPay = null;
+  var editingIndex = null;
+
+  var merchantInput = document.getElementById("merchantInput");
+  var stampInput = document.getElementById("stampInput");
+  stampInput.value = nowStamp();
+  var historyBox = document.getElementById("history");
+  var payRowsStack = document.getElementById("payRowsStack");
+  var saveBtn = document.getElementById("saveBtn");
+
+  /* ---------- history ---------- */
+  function renderHistory(){
+    historyBox.innerHTML = "";
+    if(history.length===0){
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "尚無紀錄";
+      historyBox.appendChild(empty);
+      return;
+    }
+    history.forEach(function(h, i){ h._idx = i; });
+    history.slice().reverse().forEach(function(h){
+      var row = document.createElement("div");
+      row.className = "row";
+      row.style.borderLeftColor = h.pay.bg;
+
+      var lines = document.createElement("div");
+      lines.className = "row-lines";
+
+      var line1 = document.createElement("div");
+      line1.className = "row-line1";
+      line1.textContent = h.merchant;
+      lines.appendChild(line1);
+
+      var line2 = document.createElement("div");
+      line2.className = "row-line2";
+      line2.textContent = h.amount + " " + (h.currency || "TWD") + "  " + h.pay.label + "  " + h.stamp;
+      lines.appendChild(line2);
+
+      row.appendChild(lines);
+
+      var actions = document.createElement("div");
+      actions.className = "row-actions";
+
+      var editBtn = document.createElement("button");
+      editBtn.className = "row-icon-btn edit";
+      editBtn.type = "button";
+      editBtn.textContent = "✎";
+      editBtn.setAttribute("aria-label", "編輯");
+      editBtn.onclick = function(){ startEdit(h._idx); };
+      actions.appendChild(editBtn);
+
+      var delBtn = document.createElement("button");
+      delBtn.className = "row-icon-btn delete";
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+      delBtn.setAttribute("aria-label", "刪除");
+      delBtn.onclick = function(){ deleteEntry(h._idx); };
+      actions.appendChild(delBtn);
+
+      row.appendChild(actions);
+      historyBox.appendChild(row);
+    });
+  }
+  renderHistory();
+
+  function startEdit(idx){
+    var h = history[idx];
+    if(!h) return;
+    editingIndex = idx;
+    merchantInput.value = h.merchant;
+    amount = String(h.amount);
+    document.getElementById("amountOut").textContent = amount;
+    var live = payTypes.find(function(p){ return p.label === h.pay.label; });
+    selectedPay = live || h.pay;
+    renderPayRows();
+    selectedCurrency = h.currency || currencies[0];
+    renderCurrencyGrid();
+    saveBtn.textContent = "更新這一筆";
+    stampInput.value = h.stamp;
+    merchantInput.focus();
+  }
+
+  function deleteEntry(idx){
+    if(!confirm("確定要刪除這一筆嗎？此動作無法復原。")) return;
+    history.splice(idx, 1);
+    saveJSON(STORAGE_KEY, history);
+    if(editingIndex === idx){
+      editingIndex = null;
+      saveBtn.textContent = "記一筆";
+    }
+    renderHistory();
+  }
+
+  /* ---------- keypad ---------- */
+  var keypad = document.getElementById("keypad");
+  ["1","2","3","4","5","6","7","8","9","0",".","⌫"].forEach(function(k){
+    var btn = document.createElement("button");
+    btn.className = "key";
+    btn.type = "button";
+    btn.textContent = k;
+    btn.onclick = function(){
+      if(k === "⌫") amount = amount.slice(0, -1);
+      else if(amount.length < 8) amount += k;
+      document.getElementById("amountOut").textContent = amount || "0";
+    };
+    keypad.appendChild(btn);
+  });
+
+  /* ---------- payment chips (main input area, driven by payLayout) ---------- */
+  function renderPayRows(){
+    payRowsStack.innerHTML = "";
+    payLayout.forEach(function(row){
+      var rowEl = document.createElement("div");
+      rowEl.className = "pay-grid-row";
+      row.forEach(function(id){
+        var p = findPay(id);
+        if(!p) return;
+        var btn = document.createElement("button");
+        btn.className = "pay-chip";
+        btn.type = "button";
+        btn.textContent = p.label;
+        btn.style.background = p.bg;
+        btn.style.color = p.text;
+        if(selectedPay && selectedPay.id === p.id) btn.classList.add("selected");
+        btn.onclick = function(){
+          selectedPay = p;
+          renderPayRows();
+        };
+        rowEl.appendChild(btn);
+      });
+      payRowsStack.appendChild(rowEl);
+    });
+  }
+  renderPayRows();
+
+  /* ---------- currency selector ---------- */
+  var currencyGrid = document.getElementById("currencyGrid");
+  function renderCurrencyGrid(){
+    currencyGrid.innerHTML = "";
+    currencies.forEach(function(c){
+      var btn = document.createElement("button");
+      btn.className = "currency-chip";
+      btn.type = "button";
+      btn.textContent = c;
+      if(c === selectedCurrency) btn.classList.add("selected");
+      btn.onclick = function(){
+        selectedCurrency = c;
+        renderCurrencyGrid();
+      };
+      currencyGrid.appendChild(btn);
+    });
+  }
+  renderCurrencyGrid();
+
+  var currencyModalBackdrop = document.getElementById("currencyModalBackdrop");
+  var currencySlots = document.getElementById("currencySlots");
+  function renderCurrencySlots(){
+    currencySlots.innerHTML = "";
+    currencies.forEach(function(c, i){
+      var slot = document.createElement("div");
+      slot.className = "currency-slot";
+      var idx = document.createElement("span");
+      idx.className = "currency-slot-idx";
+      idx.textContent = (i + 1) + ".";
+      slot.appendChild(idx);
+      var input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 5;
+      input.value = c;
+      input.addEventListener("input", function(){
+        currencies[i] = input.value.trim().toUpperCase() || currencies[i];
+      });
+      slot.appendChild(input);
+      currencySlots.appendChild(slot);
+    });
+  }
+  document.getElementById("currencyEditBtn").onclick = function(){
+    renderCurrencySlots();
+    currencyModalBackdrop.classList.add("open");
+  };
+  currencyModalBackdrop.addEventListener("click", function(e){
+    if(e.target === currencyModalBackdrop) finishCurrencyEdit();
+  });
+  document.getElementById("currencyDoneBtn").onclick = finishCurrencyEdit;
+  function finishCurrencyEdit(){
+    currencies = currencies.map(function(c){ return (c || "").trim().toUpperCase() || "TWD"; });
+    saveJSON(CURRENCY_KEY, currencies);
+    if(currencies.indexOf(selectedCurrency) === -1) selectedCurrency = currencies[0];
+    renderCurrencyGrid();
+    currencyModalBackdrop.classList.remove("open");
+  }
+
+  /* ---------- payment type manager ---------- */
+  var managePanel = document.getElementById("managePanel");
+  var manageModalBackdrop = document.getElementById("manageModalBackdrop");
+  var pmRows = document.getElementById("pmRows");
+
+  document.getElementById("manageBtn").onclick = function(){
+    manageModalBackdrop.classList.toggle("open");
+    if(manageModalBackdrop.classList.contains("open")) renderManager();
+  };
+  document.getElementById("pmDoneBtn").onclick = function(){
+    manageModalBackdrop.classList.remove("open");
+  };
+  manageModalBackdrop.addEventListener("click", function(e){
+    if(e.target === manageModalBackdrop) manageModalBackdrop.classList.remove("open");
+  });
+
+  function renderManager(){
+    pmRows.innerHTML = "";
+    payLayout.forEach(function(row, rowIdx){
+      var rowEl = document.createElement("div");
+      rowEl.className = "pm-grid-row";
+      rowEl.dataset.row = rowIdx;
+      row.forEach(function(id, colIdx){
+        var p = findPay(id);
+        if(!p) return;
+        var chip = document.createElement("button");
+        chip.className = "pm-chip";
+        chip.type = "button";
+        chip.textContent = p.label;
+        chip.style.background = p.bg;
+        chip.style.color = p.text;
+        chip.dataset.row = rowIdx;
+        chip.dataset.col = colIdx;
+        chip.dataset.id = id;
+        attachDrag(chip, id);
+        rowEl.appendChild(chip);
+      });
+      pmRows.appendChild(rowEl);
+    });
+    var newRowZone = document.createElement("div");
+    newRowZone.className = "pm-newrow-zone";
+    newRowZone.id = "pmNewRowZone";
+    newRowZone.textContent = "拖到這裡另起一行";
+    pmRows.appendChild(newRowZone);
+  }
+
+  document.getElementById("pmAddBtn").onclick = function(){
+    var colorPick = seedPalette[payTypes.length % seedPalette.length];
+    var np = { id: genId(), label: "新方式", bg: colorPick.bg, text: colorPick.text };
+    payTypes.push(np);
+    ensureLayout();
+    saveJSON(PAYTYPES_KEY, payTypes);
+    saveJSON(PAYLAYOUT_KEY, payLayout);
+    renderManager();
+    renderPayRows();
+    openEditCard(np.id);
+  };
+
+  /* ---- drag to reorder / re-row (pointer-based, tap vs drag disambiguated by movement) ---- */
+  function attachDrag(chip, id){
+    chip.addEventListener("pointerdown", function(ev){
+      var startX = ev.clientX, startY = ev.clientY;
+      var dragging = false;
+      var ghost = null;
+      var p = findPay(id);
+
+      function startDrag(){
+        dragging = true;
+        ghost = document.createElement("div");
+        ghost.className = "pm-ghost";
+        ghost.textContent = p.label;
+        ghost.style.background = p.bg;
+        ghost.style.color = p.text;
+        document.body.appendChild(ghost);
+        chip.classList.add("dim");
+        moveGhost(ev.clientX, ev.clientY);
+      }
+      function moveGhost(x, y){
+        ghost.style.top = (y - 14) + "px";
+        ghost.style.left = (x - 20) + "px";
+      }
+      function clearHoverStyles(){
+        Array.from(pmRows.querySelectorAll(".hover-target")).forEach(function(el){ el.classList.remove("hover-target"); });
+      }
+      function removeFromLayout(){
+        for(var r=0; r<payLayout.length; r++){
+          var i = payLayout[r].indexOf(id);
+          if(i !== -1){ payLayout[r].splice(i,1); return r; }
+        }
+        return -1;
+      }
+
+      function onMove(e){
+        if(!dragging){
+          if(Math.abs(e.clientX - startX) > 6 || Math.abs(e.clientY - startY) > 6) startDrag();
+          else return;
+        }
+        moveGhost(e.clientX, e.clientY);
+        clearHoverStyles();
+        var el = document.elementFromPoint(e.clientX, e.clientY);
+        if(!el) return;
+        var overChip = el.closest(".pm-chip");
+        var overRow = el.closest(".pm-grid-row");
+        var overNewRowZone = el.closest("#pmNewRowZone");
+
+        if(overNewRowZone){
+          overNewRowZone.classList.add("hover-target");
+        } else if(overChip && overChip.dataset.id !== id){
+          overChip.parentElement.classList.add("hover-target");
+        } else if(overRow){
+          overRow.classList.add("hover-target");
+        }
+      }
+
+      function onUp(e){
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        if(!dragging) return;
+        clearHoverStyles();
+        if(ghost) ghost.remove();
+        chip.classList.remove("dim");
+
+        var el = document.elementFromPoint(e.clientX, e.clientY);
+        if(el){
+          var overChip = el.closest(".pm-chip");
+          var overRow = el.closest(".pm-grid-row");
+          var overNewRowZone = el.closest("#pmNewRowZone");
+
+          removeFromLayout();
+          payLayout = payLayout.filter(function(r){ return r.length > 0; });
+
+          if(overNewRowZone){
+            payLayout.push([id]);
+          } else if(overChip && overChip.dataset.id !== id){
+            var targetRow = Number(overChip.dataset.row);
+            var targetCol = Number(overChip.dataset.col);
+            var r = overChip.closest(".pm-grid-row");
+            var rowIdxNow = Array.from(pmRows.querySelectorAll(".pm-grid-row")).indexOf(r);
+            var rect = overChip.getBoundingClientRect();
+            var insertAfter = (e.clientX - rect.left) > rect.width / 2;
+            var col = targetCol + (insertAfter ? 1 : 0);
+            if(payLayout[rowIdxNow]) payLayout[rowIdxNow].splice(col, 0, id);
+            else payLayout.push([id]);
+          } else if(overRow){
+            var rIdx = Array.from(pmRows.querySelectorAll(".pm-grid-row")).indexOf(overRow);
+            if(payLayout[rIdx]) payLayout[rIdx].push(id);
+            else payLayout.push([id]);
+          } else {
+            payLayout.push([id]);
+          }
+        }
+        if(payLayout.length === 0) payLayout.push([]);
+        saveJSON(PAYLAYOUT_KEY, payLayout);
+        renderManager();
+        renderPayRows();
+      }
+
+      function onSimpleUp(e){
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      }
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+
+      // if it never becomes a drag, treat as a tap -> open edit
+      var upForTap = function(e){
+        document.removeEventListener("pointerup", upForTap);
+        if(!dragging) openEditCard(id);
+      };
+      document.addEventListener("pointerup", upForTap);
+    });
+  }
+
+  /* ---------- edit card (label + color) ---------- */
+  var editCard = document.getElementById("editCard");
+  var editModalBackdrop = document.getElementById("editModalBackdrop");
+  var editLabelInput = document.getElementById("editLabelInput");
+  var editSwatchBtn = document.getElementById("editSwatchBtn");
+  var honeycomb = document.getElementById("honeycomb");
+  var editingId = null;
+
+  function buildHoneycomb(){
+    honeycomb.innerHTML = "";
+    var count = 48;
+    for(var i = 0; i < count; i++){
+      var hue = Math.round((360 / count) * i);
+      var bg = "hsl(" + hue + ",65%,62%)";
+      var text = "hsl(" + hue + ",55%,18%)";
+      var dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "hc-dot";
+      dot.style.background = bg;
+      dot.onclick = function(bgC, textC){
+        return function(){
+          var p = findPay(editingId);
+          if(!p) return;
+          p.bg = bgC; p.text = textC;
+          editSwatchBtn.style.background = bgC;
+          honeycomb.classList.remove("open");
+          saveJSON(PAYTYPES_KEY, payTypes);
+          renderManager();
+          renderPayRows();
+        };
+      }(bg, text);
+      honeycomb.appendChild(dot);
+    }
+  }
+  buildHoneycomb();
+
+  function openEditCard(id){
+    editingId = id;
+    var p = findPay(id);
+    if(!p) return;
+    editLabelInput.value = p.label;
+    editSwatchBtn.style.background = p.bg;
+    honeycomb.classList.remove("open");
+    editModalBackdrop.classList.add("open");
+  }
+  function closeEditCard(){
+    editModalBackdrop.classList.remove("open");
+    honeycomb.classList.remove("open");
+    editingId = null;
+  }
+  editModalBackdrop.addEventListener("click", function(e){
+    if(e.target === editModalBackdrop) closeEditCard();
+  });
+
+  editLabelInput.addEventListener("input", function(){
+    var p = findPay(editingId);
+    if(!p) return;
+    p.label = editLabelInput.value;
+    renderPayRows();
+  });
+  editLabelInput.addEventListener("blur", function(){
+    saveJSON(PAYTYPES_KEY, payTypes);
+    renderManager();
+  });
+  editSwatchBtn.onclick = function(){
+    honeycomb.classList.toggle("open");
+  };
+  document.getElementById("editDeleteBtn").onclick = function(){
+    var p = findPay(editingId);
+    if(!p) return;
+    if(!confirm('確定要刪除「' + p.label + '」這個付款方式嗎？')) return;
+    payTypes = payTypes.filter(function(x){ return x.id !== editingId; });
+    if(selectedPay && selectedPay.id === editingId) selectedPay = null;
+    ensureLayout();
+    saveJSON(PAYTYPES_KEY, payTypes);
+    saveJSON(PAYLAYOUT_KEY, payLayout);
+    closeEditCard();
+    renderManager();
+    renderPayRows();
+  };
+  document.getElementById("editDoneBtn").onclick = function(){
+    saveJSON(PAYTYPES_KEY, payTypes);
+    closeEditCard();
+    renderManager();
+    renderPayRows();
+  };
+
+  /* ---------- save / edit ---------- */
+  saveBtn.onclick = function(){
+    var merchant = merchantInput.value.trim();
+    if(!merchant || !amount || !selectedPay){
+      var missing = [];
+      if(!merchant) missing.push("店家");
+      if(!amount) missing.push("金額");
+      if(!selectedPay) missing.push("付款方式");
+      var orig = saveBtn.textContent;
+      saveBtn.textContent = "缺：" + missing.join("、");
+      setTimeout(function(){ saveBtn.textContent = editingIndex !== null ? "更新這一筆" : "記一筆"; }, 1200);
+      return;
+    }
+    /* snapshot the pay object so later edits to payTypes don't retroactively change past records */
+    var paySnapshot = { label: selectedPay.label, bg: selectedPay.bg, text: selectedPay.text };
+    var currencyToSave = selectedCurrency;
+
+    if(editingIndex !== null){
+      var existing = history[editingIndex];
+      history[editingIndex] = { merchant: merchant, amount: amount, currency: currencyToSave, pay: paySnapshot, stamp: stampInput.value.trim() || existing.stamp };
+      editingIndex = null;
+      saveBtn.textContent = "記一筆";
+    } else {
+      history.push({ merchant: merchant, amount: amount, currency: currencyToSave, pay: paySnapshot, stamp: stampInput.value.trim() || nowStamp() });
+    }
+    saveJSON(STORAGE_KEY, history);
+    amount = "";
+    selectedPay = null;
+    selectedCurrency = currencies[0];
+    document.getElementById("amountOut").textContent = "0";
+    merchantInput.value = "";
+    stampInput.value = nowStamp();
+    renderPayRows();
+    renderCurrencyGrid();
+    renderHistory();
+  };
+
+  merchantInput.addEventListener("keydown", function(e){
+    if(e.key === "Enter") saveBtn.click();
+  });
+
+  /* ---------- export / import (payment types + layout + history, one file) ---------- */
+  document.getElementById("exportBtn").onclick = function(){
+    if(history.length === 0 && payTypes.length === 0){
+      alert("目前沒有任何資料可以匯出。");
+      return;
+    }
+    var lines = [];
+    lines.push("#PAYTYPES");
+    payTypes.forEach(function(p){
+      lines.push(p.label + "|" + p.bg + "|" + p.text);
+    });
+    lines.push("");
+    lines.push("#PAYLAYOUT");
+    payLayout.forEach(function(row){
+      lines.push(row.map(function(id){ var p = findPay(id); return p ? p.label : ""; }).filter(Boolean).join(","));
+    });
+    lines.push("");
+    lines.push("#HISTORY");
+    history.forEach(function(h){
+      lines.push(h.merchant + "|" + h.amount + "|" + (h.currency || "TWD") + "|" + h.pay.label + "|" + h.stamp);
+    });
+    var text = lines.join("\n");
+    var blob = new Blob(["\ufeff" + text], { type: "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var d = new Date();
+    var fname = "記帳匯出_" + pad(d.getFullYear()%100) + pad(d.getMonth()+1) + pad(d.getDate()) + ".txt";
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  document.getElementById("importBtn").onclick = function(){
+    document.getElementById("importFile").click();
+  };
+
+  document.getElementById("importFile").onchange = function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt){
+      var raw = evt.target.result.replace(/^\uFEFF/, "");
+      var allLines = raw.split(/\r?\n/).map(function(l){ return l.trim(); });
+
+      var hasSections = allLines.indexOf("#PAYTYPES") !== -1 || allLines.indexOf("#HISTORY") !== -1;
+      var importedPayLines = [];
+      var importedLayoutLines = [];
+      var importedHistoryLines = [];
+
+      if(hasSections){
+        var section = null;
+        allLines.forEach(function(line){
+          if(line === "#PAYTYPES"){ section = "pay"; return; }
+          if(line === "#PAYLAYOUT"){ section = "layout"; return; }
+          if(line === "#HISTORY"){ section = "history"; return; }
+          if(line.length === 0) return;
+          if(section === "pay") importedPayLines.push(line);
+          else if(section === "layout") importedLayoutLines.push(line);
+          else if(section === "history") importedHistoryLines.push(line);
+        });
+      } else {
+        importedHistoryLines = allLines.filter(function(l){ return l.length > 0; });
+      }
+
+      var payAdded = 0, payUpdated = 0;
+      var newlyAddedIdByLabel = {};
+      importedPayLines.forEach(function(line){
+        var parts = line.split("|");
+        if(parts.length < 3) return;
+        var label = parts[0], bg = parts[1], txt = parts[2];
+        var existing = payTypes.find(function(p){ return p.label === label; });
+        if(existing){ existing.bg = bg; existing.text = txt; payUpdated++; }
+        else {
+          var np = { id: genId(), label: label, bg: bg, text: txt };
+          payTypes.push(np);
+          newlyAddedIdByLabel[label] = np.id;
+          payAdded++;
+        }
+      });
+
+      /* place newly-added payment types into their imported row, appended after whatever is already in that row */
+      importedLayoutLines.forEach(function(line, rowIdx){
+        var labels = line.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+        var idsForRow = labels
+          .map(function(lbl){ return newlyAddedIdByLabel[lbl]; })
+          .filter(Boolean);
+        if(idsForRow.length === 0) return;
+        while(payLayout.length <= rowIdx) payLayout.push([]);
+        payLayout[rowIdx] = payLayout[rowIdx].concat(idsForRow);
+      });
+
+      ensureLayout();
+
+      var parsedHistory = [];
+      var skipped = 0;
+      importedHistoryLines.forEach(function(line){
+        var merchant, amountToken, currencyToken, payLabel, stamp;
+
+        if(line.indexOf("|") !== -1){
+          var parts = line.split("|");
+          if(parts.length >= 5){
+            merchant = parts[0].trim();
+            amountToken = parts[1].trim();
+            currencyToken = parts[2].trim().toUpperCase() || "TWD";
+            payLabel = parts[3].trim();
+            stamp = parts.slice(4).join("|").trim();
+          } else if(parts.length === 4){
+            /* previous format: merchant|amount|label|stamp — no currency field, default TWD */
+            merchant = parts[0].trim();
+            amountToken = parts[1].trim();
+            currencyToken = "TWD";
+            payLabel = parts[2].trim();
+            stamp = parts[3].trim();
+          } else { skipped++; return; }
+        } else {
+          /* legacy space-delimited format: merchant amount label YY.MM.DD HH:MM — no currency, default TWD */
+          var tokens = line.split(/\s+/);
+          if(tokens.length < 5){ skipped++; return; }
+          var timeToken = tokens.pop();
+          var dateToken = tokens.pop();
+          payLabel = tokens.pop();
+          amountToken = tokens.pop();
+          merchant = tokens.join(" ");
+          currencyToken = "TWD";
+          stamp = dateToken + " " + timeToken;
+        }
+
+        if(!merchant || !amountToken || isNaN(Number(amountToken.replace(/[^0-9.]/g, "")))){ skipped++; return; }
+
+        var pay = payTypes.find(function(p){ return p.label === payLabel; });
+        if(!pay){
+          var colorPick = seedPalette[parsedHistory.length % seedPalette.length];
+          pay = { label: payLabel, bg: colorPick.bg, text: colorPick.text };
+        }
+        parsedHistory.push({ merchant: merchant, amount: amountToken, currency: currencyToken, pay: { label: pay.label, bg: pay.bg, text: pay.text }, stamp: stamp });
+      });
+
+      if(parsedHistory.length === 0 && payAdded === 0 && payUpdated === 0){
+        alert("沒有找到任何可匯入的資料，匯入取消。");
+        e.target.value = "";
+        return;
+      }
+
+      var msg = "付款方式：新增 " + payAdded + " 個、更新顏色 " + payUpdated + " 個\n紀錄：可匯入 " + parsedHistory.length + " 筆";
+      if(skipped > 0) msg += "，" + skipped + " 行格式不符已跳過";
+      msg += "\n\n紀錄會加到目前紀錄後面，要繼續嗎？";
+
+      if(!confirm(msg)){
+        e.target.value = "";
+        return;
+      }
+
+      history = history.concat(parsedHistory);
+      saveJSON(STORAGE_KEY, history);
+      saveJSON(PAYTYPES_KEY, payTypes);
+      saveJSON(PAYLAYOUT_KEY, payLayout);
+      renderHistory();
+      renderPayRows();
+      e.target.value = "";
+    };
+    reader.readAsText(file, "UTF-8");
+  };
+
+  document.getElementById("resetBtn").onclick = function(){
+    if(!confirm("確定要清空所有本機記帳資料嗎？此動作無法復原。")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(PAYTYPES_KEY);
+    localStorage.removeItem(PAYLAYOUT_KEY);
+    localStorage.removeItem(CURRENCY_KEY);
+    history = [];
+    payTypes = defaultPayTypes();
+    payLayout = null;
+    ensureLayout();
+    currencies = DEFAULT_CURRENCIES.slice();
+    selectedCurrency = currencies[0];
+    editingIndex = null;
+    selectedPay = null;
+    saveBtn.textContent = "記一筆";
+    stampInput.value = nowStamp();
+    renderHistory();
+    renderPayRows();
+    renderCurrencyGrid();
+  };
+})();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function (err) {
+        console.warn('Offline support unavailable:', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
